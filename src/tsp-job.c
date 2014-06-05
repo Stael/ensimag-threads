@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <pthread.h>
 
 #include "tsp-types.h"
 #include "tsp-job.h"
@@ -18,10 +19,14 @@ struct tsp_cell {
     struct tsp_cell *next;
 };
 
+pthread_mutex_t mutex;
+
 void init_queue (struct tsp_queue *q) {
     q->first = 0;
     q->last = 0;
     q->end = 0;
+
+    pthread_mutex_init(&mutex, NULL);
 }
 
 int empty_queue (struct tsp_queue *q) {
@@ -56,12 +61,14 @@ int get_job (struct tsp_queue *q, tsp_path_t p, int *hops, int *len) {
        return 0;
    }
    
+   pthread_mutex_lock(&mutex);
    ptr = q->first;
-   
    q->first = ptr->next;
+
    if (q->first == 0) {
        q->last = 0;
    }
+   pthread_mutex_unlock(&mutex);
 
    *len = ptr->tsp_job.len;
    *hops = ptr->tsp_job.hops;

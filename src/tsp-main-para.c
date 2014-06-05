@@ -8,6 +8,7 @@
 #include <complex.h>
 #include <stdbool.h>
 #include <unistd.h>
+#include <pthread.h>
 
 #include "tsp-types.h"
 #include "tsp-job.h"
@@ -35,6 +36,12 @@ int nb_threads=1;
 
 /* affichage SVG */
 bool affiche_sol= false;
+
+tsp_path_t sol;
+int sol_len;
+long long int cuts = 0;
+struct tsp_queue q;
+pthread_t *threads;
 
 
 static void generate_tsp_jobs (struct tsp_queue *q, int hops, int len, tsp_path_t path, long long int *cuts, tsp_path_t sol, int *sol_len, int depth)
@@ -64,14 +71,23 @@ static void usage(const char *name) {
   exit (-1);
 }
 
+static void *threadAction(void *args) {
+    /* calculer chacun des travaux */
+    tsp_path_t solution;
+    memset (solution, -1, MAX_TOWNS * sizeof (int));
+    solution[0] = 0;
+    while (!empty_queue (&q)) {
+        int hops = 0, len = 0;
+        get_job (&q, solution, &hops, &len);
+        tsp (hops, len, solution, &cuts, sol, &sol_len);
+    }
+    return 0;
+}
+
 int main (int argc, char **argv)
 {
     unsigned long long perf;
     tsp_path_t path;
-    tsp_path_t sol;
-    int sol_len;
-    long long int cuts = 0;
-    struct tsp_queue q;
     struct timespec t1, t2;
 
     /* lire les arguments */
@@ -113,16 +129,18 @@ int main (int argc, char **argv)
     generate_tsp_jobs (&q, 1, 0, path, &cuts, sol, & sol_len, 3);
     no_more_jobs (&q);
    
-    /* calculer chacun des travaux */
-    tsp_path_t solution;
-    memset (solution, -1, MAX_TOWNS * sizeof (int));
-    solution[0] = 0;
-    while (!empty_queue (&q)) {
-        int hops = 0, len = 0;
-        get_job (&q, solution, &hops, &len);
-        tsp (hops, len, solution, &cuts, sol, &sol_len);
-    }
+    threads = malloc(sizeof(pthread_t)*nb_threads);
+
+    init_tsp();
     
+    for(int i = 0; i < nb_threads; i++) {
+        pthread_create(&threads[i], NULL, threadAction, NULL);
+    }
+
+    for(int i = 0; i < nb_threads; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
     clock_gettime (CLOCK_REALTIME, &t2);
 
     if (affiche_sol)
